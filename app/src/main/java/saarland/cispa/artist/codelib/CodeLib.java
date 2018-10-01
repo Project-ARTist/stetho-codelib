@@ -23,11 +23,17 @@
 package saarland.cispa.artist.codelib;
 
 import android.content.Context;
+import android.util.ArraySet;
 import android.util.Log;
 
 import com.facebook.stetho.Stetho;
+import com.facebook.stetho.okhttp.StethoInterceptor;
 
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import okhttp3.OkHttpClient.Builder;
+import com.squareup.okhttp.OkHttpClient;
 
 public class CodeLib {
 
@@ -74,4 +80,39 @@ public class CodeLib {
         }
 
     }
+
+    private final Set<Object> okhttp2blacklist = new ArraySet<>();
+
+    @Inject
+    @SuppressWarnings("unused")
+    public void okhttp2interceptor(Object obj) {
+        // blacklist required to prevent infinite loop as the method is injected into OkHttpClient.networkInterceptors()
+        if (obj != null && obj instanceof OkHttpClient) {
+            synchronized (okhttp2blacklist) {
+                if (!okhttp2blacklist.contains(obj)) {
+                    try {
+                        okhttp2blacklist.add(obj);
+                        ((OkHttpClient) obj).networkInterceptors().add(new StethoInterceptor());
+                        Log.w(TAG, "Injected OkHttp2 interceptor");
+                    } catch (RuntimeException e) {
+                        okhttp2blacklist.remove(obj);
+                        Log.w(TAG, e);
+                    }
+                }
+            }
+        }
+    }
+
+    @Inject
+    @SuppressWarnings("unused")
+    public void okhttp3interceptor(Object obj){
+        try {
+            ((Builder) obj).addNetworkInterceptor(new com.facebook.stetho.okhttp3.StethoInterceptor());
+            Log.w(TAG, "Injected OkHttp3 Interceptor");
+        } catch (RuntimeException e) {
+            Log.w(TAG, e);
+        }
+    }
+
+
 }
